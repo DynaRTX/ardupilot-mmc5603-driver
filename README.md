@@ -4,6 +4,33 @@ Native dual-chip support for the **Memsic MMC5603NJ** 3-axis magnetometer in Ard
 
 ---
 
+## Downloads & Pre-compiled Releases
+
+Ready-to-flash binaries compiled directly against ArduCopter 4.7.1 for the **SpeedyBee F405 AIO** with the MMC5603 driver patch:
+
+📦 **[Download v1.0.0 Firmware Release](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases/tag/v1.0.0)**
+
+| File Asset | Format | Flashing Tool |
+| :--- | :--- | :--- |
+| **`arducopter.apj`** | ArduPilot JSON Package | **Mission Planner** / **QGroundControl** (*Load custom firmware*) |
+| **`arducopter.bin`** | Raw Binary | DFU / STM32 flashing utilities |
+| **`arducopter.hex`** | Intel HEX | STM32CubeProgrammer / Betaflight DFU recovery |
+| **`arducopter_with_bl.hex`** | Combined Firmware + Bootloader | Full chip erase / unbrick recovery |
+
+### Built-in & Enabled Target Parameters
+The pre-compiled release includes default SpeedyBee F405 AIO hardware mappings with only the MMC5603 driver enabled:
+* **`AP_COMPASS_MMC5XX3_ENABLED = 1`**: Enables dual MMC5983 & MMC5603 autodetection
+* **`AP_COMPASS_PROBING_ENABLED = 1`**: Automatic I2C compass scanning
+* **`HAL_COMPASS_AUTO_ROT_DEFAULT = 2`**: Automatic compass orientation learning
+* **`HAL_FRAME_TYPE_DEFAULT = 12`**: Standard Betaflight / X quad motor mapping
+* **`MOT_PWM_TYPE = 6`**: DShot600 motor protocol
+* **`SERVO_BLH_BDMASK = 15`**: Bidirectional DShot enabled on channels 1–4 (RPM telemetry)
+* **`GPS_DRV_OPTIONS = 4`**: 115200 baud UBlox GPS communication
+* **`NTF_LED_TYPES = 257`**: WS2812 addressable LED support enabled on pad M5
+* **`OSD_ENABLED = 1`**: Integrated MAX7456 analog OSD
+
+---
+
 ## Key Capabilities
 
 - **Dual-Sensor Auto-Detection**: Dynamically probes both MMC5983 (Product ID `0x30` on reg `0x2F`) and MMC5603 (Product ID `0x10` on reg `0x39`) at startup.
@@ -75,6 +102,7 @@ Build your target vehicle firmware (e.g. ArduCopter for SpeedyBeeF405AIO):
 
 ## Resources
 
+- 📦 [GitHub Releases](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases)
 - 📚 [CHANGES.md — Line-by-Line Diffs](./CHANGES.md)
 - 📄 [Memsic MMC5603NJ Datasheet (Rev. B)](https://www.memsic.com/)
 - 🛒 [Adafruit MMC5603 Breakout Board](https://www.adafruit.com/product/5579)
