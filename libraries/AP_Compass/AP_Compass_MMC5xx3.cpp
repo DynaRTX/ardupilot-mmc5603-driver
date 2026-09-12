@@ -22,52 +22,38 @@
 
 extern const AP_HAL::HAL &hal;
 
-// -----------------------------------------------------------------------
-// MMC5983 register map (original)
-// -----------------------------------------------------------------------
-#define MMC5983_REG_PRODUCT_ID   0x2F
-#define MMC5983_REG_XOUT_L       0x00
-#define MMC5983_REG_STATUS       0x08
-#define MMC5983_REG_CONTROL0     0x09
-#define MMC5983_REG_CONTROL1     0x0A
-#define MMC5983_REG_CONTROL2     0x0B
-#define MMC5983_ID               0x30
+// MMC5983 register definitions
+#define REG_PRODUCT_ID      0x2F
+#define REG_XOUT_L          0x00
+#define REG_STATUS          0x08
+#define REG_CONTROL0        0x09
+#define REG_CONTROL1        0x0A
+#define REG_CONTROL2        0x0B
 
-// -----------------------------------------------------------------------
-// MMC5603 register map
-// Source: Adafruit_MMC56x3 Arduino library (Adafruit_MMC56x3.h/.cpp)
-//         https://github.com/adafruit/Adafruit_MMC56x3
-// Verified against: ESPHome mmc5603.cpp, Memsic MMC5603NJ datasheet rev B
-// -----------------------------------------------------------------------
+// MMC5603 register definitions
 #define MMC5603_REG_PRODUCT_ID   0x39
-#define MMC5603_REG_XOUT_L       0x00  // same start address as MMC5983
+#define MMC5603_REG_XOUT_L       0x00
 #define MMC5603_REG_STATUS       0x18
 #define MMC5603_REG_CONTROL0     0x1B
 #define MMC5603_REG_CONTROL1     0x1C
 #define MMC5603_REG_CONTROL2     0x1D
-#define MMC5603_REG_ODR          0x1A
-#define MMC5603_ID               0x10
 
-// -----------------------------------------------------------------------
-// Shared control bit definitions (same meaning, different register addresses)
-// -----------------------------------------------------------------------
-// CONTROL0 bits
-#define CTRL0_SET    0x08   // Pulse SET coil
-#define CTRL0_RESET  0x10   // Pulse RESET coil
-#define CTRL0_TM_M   0x01   // Take Measurement for Magnetic field
-#define CTRL0_TM_T   0x02   // Take Measurement for Temperature
+// bits in CONTROL0
+#define REG_CONTROL0_RESET  0x10 // Set coil for measuring offset
+#define REG_CONTROL0_SET    0x08 // Reset coil for measuring offset
+#define REG_CONTROL0_TMM    0x01 // Take Measurement for Magnetic field
+#define REG_CONTROL0_TMT    0x02 // Take Measurement for Temperature
 
-// CONTROL1 bits
-#define CTRL1_SW_RST 0x80   // Software reset
-#define CTRL1_BW0    0x01   // Bandwidth bit 0
-#define CTRL1_BW1    0x02   // Bandwidth bit 1
+// bits in CONTROL1
+#define REG_CONTROL1_SW_RST 0x80 // Software reset
+#define REG_CONTROL1_BW0    0x01
+#define REG_CONTROL1_BW1    0x02
 
-// MMC5983 STATUS: bit 0 = Meas_M_Done
-#define MMC5983_STATUS_MEAS_DONE  0x01
-// MMC5603 STATUS: bit 0 = Meas_M_Done (per MEMSIC MMC5603NJ datasheet table 5)
-// Note: Adafruit library uses RegisterBits(status_reg, 1, 6) which counts bit
-// position from MSB in their BusIO abstraction - the actual hardware bit is 0.
-#define MMC5603_STATUS_MEAS_DONE  0x40
+#define MMC5983_ID 0x30
+#define MMC5603_ID 0x10
+
+#define MMC5983_STATUS_MEAS_DONE 0x01
+#define MMC5603_STATUS_MEAS_DONE 0x40
 
 AP_Compass_Backend *AP_Compass_MMC5XX3::probe(AP_HAL::OwnPtr<AP_HAL::Device> dev,
                                               bool force_external,
@@ -107,15 +93,12 @@ bool AP_Compass_MMC5XX3::init()
         dev->set_read_flag(0x80);
     }
 
+    // Step 1: Probe for MMC5983 (Product ID at 0x2F, expected 0x30)
     uint8_t whoami = 0;
-
-    // ------------------------------------------------------------------
-    // Step 1: Try MMC5983 — product ID at register 0x2F, expected 0x30
-    // ------------------------------------------------------------------
     uint8_t tries = 10;
     while (whoami == 0 && tries > 0) {
         tries--;
-        dev->read_registers(MMC5983_REG_PRODUCT_ID, &whoami, 1);
+        dev->read_registers(REG_PRODUCT_ID, &whoami, 1);
         hal.scheduler->delay(5);
     }
 
@@ -123,27 +106,26 @@ bool AP_Compass_MMC5XX3::init()
         chip_variant = ChipVariant::MMC5983;
 
         // reset sensor
-        dev->write_register(MMC5983_REG_CONTROL1, CTRL1_SW_RST);
-        hal.scheduler->delay(15);  // 10ms minimum startup
+        dev->write_register(REG_CONTROL1, REG_CONTROL1_SW_RST);
 
-        // clear BW bits (100Hz output)
-        if (!dev->write_register(MMC5983_REG_CONTROL1, 0)) {
+        // 10ms minimum startup time
+        hal.scheduler->delay(15);
+
+        // setup for 100Hz output
+        if (!dev->write_register(REG_CONTROL1, 0)) {
             return false;
         }
 
+        /* register the compass instance in the frontend */
         dev->set_device_type(DEVTYPE_MMC5983);
         if (!register_compass(dev->get_bus_id())) {
             return false;
         }
+
         printf("Found a MMC5983 on 0x%x as compass %u\n", unsigned(dev->get_bus_id()), instance);
 
     } else {
-        // ------------------------------------------------------------------
-        // Step 2: Try MMC5603 — product ID at register 0x39, expected 0x10
-        // The Adafruit library also accepts 0x00 as a valid ID on some
-        // early-revision parts (see Adafruit_MMC56x3.cpp begin()), so we
-        // allow that too.
-        // ------------------------------------------------------------------
+        // Step 2: Probe for MMC5603 (Product ID at 0x39, expected 0x10)
         whoami = 0;
         tries = 10;
         while (tries > 0) {
@@ -157,32 +139,32 @@ bool AP_Compass_MMC5XX3::init()
         }
 
         if (whoami != MMC5603_ID && whoami != 0x00) {
-            // Neither MMC5983 nor MMC5603 found
             return false;
         }
 
         chip_variant = ChipVariant::MMC5603;
 
-        // Software reset (same bit position as MMC5983)
-        dev->write_register(MMC5603_REG_CONTROL1, CTRL1_SW_RST);
-        hal.scheduler->delay(20);  // 20ms per Adafruit reference driver
+        // reset sensor
+        dev->write_register(MMC5603_REG_CONTROL1, REG_CONTROL1_SW_RST);
+        hal.scheduler->delay(20);
 
-        // Explicitly clear BW bits to guarantee 20-bit mode (BW1=0, BW0=0)
+        // clear BW bits
         dev->write_register(MMC5603_REG_CONTROL1, 0x00);
 
-        // SET/RESET degauss sequence (per Adafruit magnetSetReset())
-        dev->write_register(MMC5603_REG_CONTROL0, CTRL0_SET);
+        // degauss pulse
+        dev->write_register(MMC5603_REG_CONTROL0, REG_CONTROL0_SET);
         hal.scheduler->delay(1);
-        dev->write_register(MMC5603_REG_CONTROL0, CTRL0_RESET);
+        dev->write_register(MMC5603_REG_CONTROL0, REG_CONTROL0_RESET);
         hal.scheduler->delay(1);
 
-        // No continuous mode — we use one-shot like MMC5983 path
         dev->write_register(MMC5603_REG_CONTROL2, 0x00);
 
+        /* register the compass instance in the frontend */
         dev->set_device_type(DEVTYPE_MMC5603);
         if (!register_compass(dev->get_bus_id())) {
             return false;
         }
+
         printf("Found a MMC5603 on 0x%x as compass %u\n", unsigned(dev->get_bus_id()), instance);
     }
 
@@ -207,31 +189,32 @@ void AP_Compass_MMC5XX3::timer()
     // sensor is read at about 100Hz, so about every 10 seconds
     const uint16_t measure_count_limit = 1000U;
 
-    // MMC5983: 16-bit, zero offset = 32768, sensitivity = 4096 counts/Gauss
+    // MMC5983 parameters (16-bit)
     const uint16_t mmc5983_zero_offset = 32768U;
     const uint16_t mmc5983_sensitivity = 4096U;
     constexpr float mmc5983_counts_to_milliGauss = 1.0e3f / mmc5983_sensitivity;
 
-    // MMC5603: 20-bit, zero offset = 524288 (2^19), sensitivity per datasheet:
-    //   0.00625 uT/LSB = 0.0625 mG/LSB  =>  1/0.0625 = 16000 counts/Gauss
-    //   (Adafruit: event->magnetic.x = (float)x * 0.00625 uT,
-    //    convert to milliGauss: * 0.00625 * 10 = * 0.0625)
-    const uint32_t mmc5603_zero_offset = 524288UL;  // 2^19
-    constexpr float mmc5603_counts_to_milliGauss = 0.0625f;  // 1/16000 * 1000
+    // MMC5603 parameters (20-bit: 0.0625 mG/LSB)
+    const uint32_t mmc5603_zero_offset = 524288UL;
+    constexpr float mmc5603_counts_to_milliGauss = 0.0625f;
 
-    // Select register addresses based on detected chip
-    const uint8_t reg_ctrl0  = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_CONTROL0 : MMC5983_REG_CONTROL0;
-    const uint8_t reg_status = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_STATUS    : MMC5983_REG_STATUS;
-    const uint8_t reg_xout_l = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_XOUT_L   : MMC5983_REG_XOUT_L;
+    const uint8_t reg_ctrl0  = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_CONTROL0 : REG_CONTROL0;
+    const uint8_t reg_status = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_STATUS    : REG_STATUS;
+    const uint8_t reg_xout_l = (chip_variant == ChipVariant::MMC5603) ? MMC5603_REG_XOUT_L   : REG_XOUT_L;
     const uint8_t status_done_bit = (chip_variant == ChipVariant::MMC5603) ? MMC5603_STATUS_MEAS_DONE : MMC5983_STATUS_MEAS_DONE;
-    // MMC5603 reads 9 bytes (20-bit x3 + 3 lower nibble bytes), MMC5983 reads 6 bytes (16-bit x3)
     const uint8_t read_len   = (chip_variant == ChipVariant::MMC5603) ? 9 : 6;
 
+    /*
+      we use the SET/RESET method to remove bridge offset every
+      measure_count_limit measurements. This involves a fairly complex
+      state machine, but means we are much less sensitive to
+      temperature changes
+     */
     switch (state) {
 
     // perform a set operation
     case MMCState::STATE_SET: {
-        if (!dev->write_register(reg_ctrl0, CTRL0_SET)) {
+        if (!dev->write_register(reg_ctrl0, REG_CONTROL0_SET)) {
             break;
         }
         // minimum time to wait after set/reset before take measurement request is 1ms
@@ -241,7 +224,7 @@ void AP_Compass_MMC5XX3::timer()
 
     // request a measurement for field and offset calculation after set operation
     case MMCState::STATE_SET_MEASURE: {
-        if (!dev->write_register(reg_ctrl0, CTRL0_TM_M)) {
+        if (!dev->write_register(reg_ctrl0, REG_CONTROL0_TMM)) {
             break;
         }
         state = MMCState::STATE_SET_WAIT;
@@ -269,7 +252,7 @@ void AP_Compass_MMC5XX3::timer()
         }
 
         // request reset operation
-        if (!dev->write_register(reg_ctrl0, CTRL0_RESET)) {
+        if (!dev->write_register(reg_ctrl0, REG_CONTROL0_RESET)) {
             break;
         }
         // minimum time to wait after set/reset before take measurement request is 1ms
@@ -279,10 +262,12 @@ void AP_Compass_MMC5XX3::timer()
 
     // request a measurement for field and offset calculation after reset operation
     case MMCState::STATE_RESET_MEASURE: {
-        if (!dev->write_register(reg_ctrl0, CTRL0_TM_M)) {
+        // take measurement request
+        if (!dev->write_register(reg_ctrl0, REG_CONTROL0_TMM)) {
             state = MMCState::STATE_SET;
             break;
         }
+
         state = MMCState::STATE_RESET_WAIT;
         break;
     }
@@ -312,13 +297,6 @@ void AP_Compass_MMC5XX3::timer()
          */
         Vector3f f1, f2;
         if (chip_variant == ChipVariant::MMC5603) {
-            // MMC5603: 20-bit signed, packed as:
-            // bytes 0-5: upper 16 bits of X,X,Y,Y,Z,Z
-            // bytes 6-8: lower nibbles packed (bits[7:4]=X_lo, bits[3:0]=Y_lo for byte6; etc.)
-            // x = buf[0]<<12 | buf[1]<<4 | buf[6]>>4
-            // y = buf[2]<<12 | buf[3]<<4 | buf[7]>>4
-            // z = buf[4]<<12 | buf[5]<<4 | buf[8]>>4
-            // (per Adafruit_MMC56x3.cpp getEvent())
             int32_t x0 = ((uint32_t)data0[0] << 12) | ((uint32_t)data0[1] << 4) | ((uint32_t)data0[6] >> 4);
             int32_t y0 = ((uint32_t)data0[2] << 12) | ((uint32_t)data0[3] << 4) | ((uint32_t)data0[7] >> 4);
             int32_t z0 = ((uint32_t)data0[4] << 12) | ((uint32_t)data0[5] << 4) | ((uint32_t)data0[8] >> 4);
@@ -337,11 +315,11 @@ void AP_Compass_MMC5XX3::timer()
                 offset = new_offset;
                 have_initial_offset = true;
             } else {
+                // low pass changes to the offset
                 offset = offset * 0.5f + new_offset * 0.5f;
             }
             accumulate_sample(field);
         } else {
-            // MMC5983: 16-bit big-endian pairs
             f1 = Vector3f{float((data0[0] << 8) + data0[1]) - mmc5983_zero_offset,
                           float((data0[2] << 8) + data0[3]) - mmc5983_zero_offset,
                           float((data0[4] << 8) + data0[5]) - mmc5983_zero_offset};
@@ -354,12 +332,13 @@ void AP_Compass_MMC5XX3::timer()
                 offset = new_offset;
                 have_initial_offset = true;
             } else {
+                // low pass changes to the offset
                 offset = offset * 0.5f + new_offset * 0.5f;
             }
             accumulate_sample(field);
         }
 
-        if (!dev->write_register(reg_ctrl0, CTRL0_TM_M)) {
+        if (!dev->write_register(reg_ctrl0, REG_CONTROL0_TMM)) {
             printf("failed to initiate measurement\n");
             state = MMCState::STATE_SET;
         } else {
@@ -413,7 +392,7 @@ void AP_Compass_MMC5XX3::timer()
             measure_count = 0;
             state = MMCState::STATE_SET;
         } else {
-            if (!dev->write_register(reg_ctrl0, CTRL0_TM_M)) {
+            if (!dev->write_register(reg_ctrl0, REG_CONTROL0_TMM)) { // Take Measurement
                 state = MMCState::STATE_SET;
             }
         }
