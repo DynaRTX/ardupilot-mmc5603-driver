@@ -8,7 +8,7 @@ Native dual-chip support for the **Memsic MMC5603NJ** 3-axis magnetometer in Ard
 
 Ready-to-flash binaries compiled directly against ArduCopter 4.7.1 for the **SpeedyBee F405 AIO** with the MMC5603 driver patch:
 
-📦 **[Download v1.0.0 Firmware Release](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases/tag/v1.0.0)** [![release](https://img.shields.io/badge/release-alpha-yellow.svg)](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases/tag/v1.0.0)
+📦 **[Download v1.0.0-alpha Firmware Release](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases/tag/v1.0.0-alpha)** [![release](https://img.shields.io/badge/release-alpha-yellow.svg)](https://github.com/DynaRTX/ardupilot-mmc5603-driver/releases/tag/v1.0.0-alpha)
 
 | File Asset | Format | Flashing Tool |
 | :--- | :--- | :--- |
